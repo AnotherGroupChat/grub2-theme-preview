@@ -106,7 +106,7 @@ def _generate_dummy_menu_entries():
             reboot
         }
 
-        menuentry "Memtest86+" {
+        menuentry "Memtest86+" --class memtest {
             reboot
         }
     """)
@@ -144,9 +144,9 @@ def _make_grub_cfg_load_our_theme(grub_cfg_content, source_type, resolution_or_n
     epilog_chunks = [
         # Ensure that we always have one or more menu entries
         '',
-        'submenu \'Reboot / Shutdown\' {',
-        '    menuentry Reboot { reboot }',
-        '    menuentry Shutdown { halt }',
+        'submenu \'Reboot / Shutdown\' --class shutdown {',
+        '    menuentry Reboot --class restart { reboot }',
+        '    menuentry Shutdown --class shutdown { halt }',
         '}',
         '',
         'set default=0',  # i.e. move cursor to first entry
@@ -301,6 +301,11 @@ def parse_command_line(argv):
                       help='pass "-display DISPLAY" to QEMU, see "man qemu" for details'
                       ' (default: use QEMU\'s default display)')
 
+    qemu.add_argument('--full-screen',
+                      dest='qemu_full_screen',
+                      action='store_true',
+                      help='pass "-full-screen" to QEMU')
+
     qemu.add_argument('--no-kvm',
                       dest='enable_kvm',
                       default=True,
@@ -308,6 +313,12 @@ def parse_command_line(argv):
                       help='do not pass -enable-kvm to QEMU'
                       ' (and hence fall back to acceleration "tcg"'
                       ' which is significantly slower than KVM)')
+
+    qemu.add_argument('--vga',
+                      dest='qemu_vga',
+                      metavar='CARD',
+                      help='pass "-vga CARD" to QEMU, see "man qemu" for details'
+                      ' (default: use QEMU\'s default VGA card)')
 
     debugging = parser.add_argument_group('debugging arguments')
     debugging.add_argument('--debug',
@@ -339,7 +350,7 @@ def parse_command_line(argv):
 
 
 def _grub2_directory(platform):
-    return  '%s/%s' % (os.environ.get('G2TP_GRUB_LIB', '/usr/lib/grub'), platform)
+    return '{}/{}'.format(os.environ.get('G2TP_GRUB_LIB', '/usr/lib/grub'), platform)
 
 
 def _grub2_platform():
@@ -362,7 +373,7 @@ def _grub2_ovmf_tuple():
     3. a list of package names to try install, potentially
     """
     omvf_image = os.environ.get('G2TP_OVMF_IMAGE')
-    if omvf_image is not None: # Support non-standard locations e.g. NixOS
+    if omvf_image is not None:  # Support non-standard locations e.g. NixOS
         candidates = [omvf_image]
     else:
         candidates = [
@@ -508,6 +519,10 @@ def _inner_main(options):
                     run_command.append('-enable-kvm')
                 if options.qemu_display is not None:
                     run_command += ['-display', options.qemu_display]
+                if options.qemu_vga is not None:
+                    run_command += ['-vga', options.qemu_vga]
+                if options.qemu_full_screen:
+                    run_command.append('-full-screen')
                 if is_efi_host:
                     run_command += [
                         '-bios',
